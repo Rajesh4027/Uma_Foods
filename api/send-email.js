@@ -9,13 +9,16 @@ dotenv.config();
 
 const app = express();
 
-// CORS configuration - Allow your domain
+// CORS configuration - FIXED FOR YOUR DOMAIN
 app.use(cors({
   origin: function (origin, callback) {
+    // Allow requests with no origin (like Postman, curl)
     if (!origin) return callback(null, true);
     
     const allowedOrigins = [
+      'https://tamilorganics.netlify.app/index.html',
       'https://umafoodproducts.com',
+      'https://www.umafoodproducts.com',
       'http://localhost:5500',
       'http://localhost:5501',
       'http://127.0.0.1:5500',
@@ -23,7 +26,9 @@ app.use(cors({
     ];
     
     // Allow all Netlify and Vercel preview URLs
-    if (origin.includes('.netlify.app') || origin.includes('.vercel.app')) {
+    if (origin.includes('.netlify.app') || 
+        origin.includes('.vercel.app') ||
+        origin.includes('umafoodproducts.com')) {
       return callback(null, true);
     }
     
@@ -31,12 +36,13 @@ app.use(cors({
       callback(null, true);
     } else {
       console.log('⚠️ Request from origin:', origin);
-      callback(null, true); // Allow all for now
+      // Allow all origins for now (CHANGE TO false IN PRODUCTION)
+      callback(null, true);
     }
   },
   methods: ['POST', 'GET', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: false
+  credentials: true
 }));
 
 app.use(express.json());
@@ -66,6 +72,7 @@ const upload = multer({
 
 // Root endpoint - Health check
 app.get('/', (req, res) => {
+  console.log('✅ Health check requested from:', req.headers.origin || 'No origin');
   res.json({ 
     status: 'OK', 
     message: 'Uma Foods Backend API is running',
@@ -74,7 +81,8 @@ app.get('/', (req, res) => {
     endpoints: {
       health: 'GET /',
       sendEmail: 'POST /send-email'
-    }
+    },
+    emailConfigured: !!(process.env.EMAIL_USER && process.env.EMAIL_PASS)
   });
 });
 
@@ -107,7 +115,21 @@ app.post('/send-email', upload.single('resume'), async (req, res) => {
       });
     }
 
+    // Check if email credentials are configured
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+      console.error('❌ Email credentials not configured');
+      return res.status(500).json({
+        success: false,
+        message: 'Server configuration error. Please contact support.'
+      });
+    }
+
     console.log('✅ Validation passed, preparing email...');
+    console.log('📧 Email config:', {
+      user: process.env.EMAIL_USER,
+      passConfigured: !!process.env.EMAIL_PASS,
+      receiver: process.env.RECEIVER_EMAIL
+    });
 
     // Create nodemailer transporter
     const transporter = nodemailer.createTransport({
@@ -117,6 +139,19 @@ app.post('/send-email', upload.single('resume'), async (req, res) => {
         pass: process.env.EMAIL_PASS,
       },
     });
+
+    // Verify transporter
+    try {
+      await transporter.verify();
+      console.log('✅ Email transporter verified');
+    } catch (verifyError) {
+      console.error('❌ Email verification failed:', verifyError.message);
+      return res.status(500).json({
+        success: false,
+        message: 'Email configuration error. Please contact support.',
+        error: verifyError.message
+      });
+    }
 
     // Email content
     const mailOptions = {
