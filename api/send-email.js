@@ -8,9 +8,10 @@ dotenv.config();
 
 const app = express();
 
-// CORS configuration
+// CORS configuration - PRODUCTION READY
 app.use(cors({
   origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
     const allowedOrigins = [
@@ -21,8 +22,10 @@ app.use(cors({
       'http://127.0.0.1:5500',
       'http://127.0.0.1:5501',
       'http://127.0.0.1:5502',
+      // Add your Netlify URL here when you deploy
     ];
     
+    // Allow all Netlify preview URLs
     if (origin.includes('.netlify.app')) {
       return callback(null, true);
     }
@@ -31,7 +34,7 @@ app.use(cors({
       callback(null, true);
     } else {
       console.log('⚠️ Blocked by CORS:', origin);
-      callback(null, true);
+      callback(null, true); // Allow for now, change to false in strict production
     }
   },
   methods: ['POST', 'GET', 'OPTIONS'],
@@ -42,12 +45,12 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Multer configuration
+// Multer configuration for file uploads (max 3MB)
 const storage = multer.memoryStorage();
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 3 * 1024 * 1024,
+    fileSize: 3 * 1024 * 1024, // 3MB limit
   },
   fileFilter: (req, file, cb) => {
     const allowedMimes = [
@@ -64,25 +67,22 @@ const upload = multer({
   }
 });
 
-// Brevo SMTP Transporter
+// Nodemailer transporter
 const transporter = nodemailer.createTransport({
-  host: 'smtp-relay.brevo.com',
-  port: 587,
-  secure: false,
+  service: 'gmail',
   auth: {
-    user: process.env.BREVO_SMTP_USER,
-    pass: process.env.BREVO_SMTP_KEY,
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
   },
 });
 
-// Root endpoint
+// Root endpoint - Health check
 app.get('/', (req, res) => {
   res.json({ 
     status: 'OK', 
     message: 'Uma Foods Backend API is running',
-    version: '2.0.0',
+    version: '1.0.0',
     timestamp: new Date().toISOString(),
-    emailService: 'Brevo SMTP',
     endpoints: {
       health: 'GET /',
       sendEmail: 'POST /send-email'
@@ -130,233 +130,84 @@ app.post('/send-email', upload.single('resume'), async (req, res) => {
 
     console.log('✅ Validation passed, preparing email...');
 
-    // Email configuration - Applicant's email shows as sender!
+    // Email content
     const mailOptions = {
-      from: `"${firstName} ${lastName}" <${email}>`, // THIS SHOWS APPLICANT'S EMAIL!
+      from: process.env.EMAIL_USER,
       to: process.env.RECEIVER_EMAIL,
-      replyTo: email,
-      subject: `🎯 Job Application: ${category} - ${firstName} ${lastName}`,
+      subject: `🎯 New Job Application: ${category} - ${firstName} ${lastName}`,
       html: `
         <!DOCTYPE html>
         <html>
         <head>
           <meta charset="utf-8">
           <style>
-            body { 
-              font-family: Arial, sans-serif; 
-              line-height: 1.6; 
-              color: #333; 
-              margin: 0;
-              padding: 0;
-              background-color: #f4f4f4;
-            }
-            .email-wrapper {
-              max-width: 650px;
-              margin: 20px auto;
-              background: white;
-              border-radius: 12px;
-              overflow: hidden;
-              box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-            }
-            .applicant-header { 
-              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-              padding: 40px 30px;
-              text-align: center;
-              color: white;
-            }
-            .applicant-name { 
-              font-size: 36px; 
-              font-weight: 800;
-              margin: 0 0 15px 0;
-              letter-spacing: 1px;
-              text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
-            }
-            .applicant-email {
-              font-size: 20px;
-              font-weight: 600;
-              background: rgba(255,255,255,0.25);
-              padding: 12px 25px;
-              border-radius: 25px;
-              display: inline-block;
-              margin: 10px 0;
-            }
-            .position-badge {
-              font-size: 18px;
-              font-weight: 600;
-              background: rgba(255,255,255,0.2);
-              padding: 10px 20px;
-              border-radius: 20px;
-              display: inline-block;
-              margin-top: 15px;
-            }
-            .content-area { 
-              padding: 35px 30px;
-              background: white;
-            }
-            .action-alert {
-              background: linear-gradient(135deg, #ffd89b 0%, #19547b 100%);
-              color: white;
-              padding: 20px;
-              border-radius: 10px;
-              text-align: center;
-              margin-bottom: 30px;
-              font-size: 16px;
-              font-weight: 600;
-            }
-            .quick-contact {
-              display: flex;
-              gap: 15px;
-              justify-content: center;
-              margin: 25px 0;
-            }
-            .contact-btn {
-              flex: 1;
-              padding: 15px 20px;
-              text-align: center;
-              border-radius: 10px;
-              text-decoration: none;
-              font-weight: 700;
-              font-size: 15px;
-              transition: transform 0.2s;
-              box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-            }
-            .contact-btn:hover {
-              transform: translateY(-2px);
-              box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-            }
-            .btn-email {
-              background: #667eea;
-              color: white;
-            }
-            .btn-phone {
-              background: #28a745;
-              color: white;
-            }
-            .info-section {
-              background: #f8f9fa;
-              padding: 25px;
-              border-radius: 10px;
-              margin: 20px 0;
-            }
-            .info-row {
-              display: flex;
-              padding: 12px 0;
-              border-bottom: 1px solid #e0e0e0;
-            }
-            .info-row:last-child {
-              border-bottom: none;
-            }
-            .info-label {
-              font-weight: 700;
-              color: #555;
-              width: 180px;
-              font-size: 15px;
-            }
-            .info-value {
-              color: #333;
-              font-size: 15px;
-              font-weight: 500;
-            }
-            .info-value a {
-              color: #667eea;
-              text-decoration: none;
-              font-weight: 700;
-            }
-            .resume-box {
-              background: #fff3cd;
-              border-left: 5px solid #ffc107;
-              padding: 20px;
-              border-radius: 8px;
-              margin: 25px 0;
-            }
-            .footer-note {
-              background: #e8f4f8;
-              padding: 20px;
-              border-radius: 8px;
-              text-align: center;
-              margin-top: 25px;
-              border: 2px dashed #667eea;
-            }
-            .footer-text {
-              text-align: center;
-              padding: 20px;
-              color: #999;
-              font-size: 13px;
-            }
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+            .header h1 { color: white; margin: 0; font-size: 28px; }
+            .content { background: white; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+            .content h2 { color: #333; border-bottom: 3px solid #667eea; padding-bottom: 10px; margin-top: 0; }
+            .info-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+            .info-table td { padding: 12px 10px; border-bottom: 1px solid #f0f0f0; }
+            .info-table td:first-child { font-weight: bold; color: #555; width: 40%; }
+            .info-table td:last-child { color: #333; }
+            .highlight { background-color: #f0f4ff; border-left: 4px solid #667eea; padding: 15px; margin: 20px 0; border-radius: 5px; }
+            .footer { text-align: center; margin-top: 20px; color: #999; font-size: 12px; }
+            .badge { display: inline-block; padding: 5px 15px; background: #667eea; color: white; border-radius: 20px; font-size: 14px; }
           </style>
         </head>
         <body>
-          <div class="email-wrapper">
-            <!-- Applicant Header -->
-            <div class="applicant-header">
-              <div class="applicant-name">📋 ${firstName} ${lastName}</div>
-              <div class="applicant-email">✉️ ${email}</div>
-              <div class="position-badge">💼 Applied for: ${category}</div>
+          <div class="container">
+            <div class="header">
+              <h1>📋 New Job Application</h1>
+              <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0;">Uma Foods Career Portal</p>
             </div>
             
-            <!-- Content Area -->
-            <div class="content-area">
-              <!-- Action Alert -->
-              <div class="action-alert">
-                ⚡ Click "REPLY" button to respond directly to ${firstName}
+            <div class="content">
+              <h2>Applicant Information</h2>
+              
+              <table class="info-table">
+                <tr>
+                  <td>👤 Full Name</td>
+                  <td><strong>${firstName} ${lastName}</strong></td>
+                </tr>
+                <tr>
+                  <td>📧 Email Address</td>
+                  <td><a href="mailto:${email}" style="color: #667eea; text-decoration: none;">${email}</a></td>
+                </tr>
+                <tr>
+                  <td>📱 Phone Number</td>
+                  <td><a href="tel:${phone}" style="color: #667eea; text-decoration: none;">${phone}</a></td>
+                </tr>
+                <tr>
+                  <td>💼 Position Applied</td>
+                  <td><span class="badge">${category}</span></td>
+                </tr>
+                <tr>
+                  <td>📎 Resume File</td>
+                  <td>${resume.originalname} <br><small style="color: #999;">(${(resume.size / 1024).toFixed(2)} KB)</small></td>
+                </tr>
+                <tr>
+                  <td>🕐 Submitted On</td>
+                  <td>${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST</td>
+                </tr>
+              </table>
+              
+              <div class="highlight">
+                <strong>📎 Action Required:</strong> The applicant's resume is attached to this email. Please review and respond accordingly.
               </div>
               
-              <!-- Quick Contact Buttons -->
-              <div class="quick-contact">
-                <a href="mailto:${email}" class="contact-btn btn-email">
-                  📧 Email ${firstName}
-                </a>
-                <a href="tel:${phone}" class="contact-btn btn-phone">
-                  📱 Call Now
-                </a>
-              </div>
-              
-              <!-- Applicant Information -->
-              <div class="info-section">
-                <div class="info-row">
-                  <div class="info-label">👤 Full Name</div>
-                  <div class="info-value"><strong>${firstName} ${lastName}</strong></div>
-                </div>
-                <div class="info-row">
-                  <div class="info-label">📧 Email Address</div>
-                  <div class="info-value"><a href="mailto:${email}">${email}</a></div>
-                </div>
-                <div class="info-row">
-                  <div class="info-label">📱 Phone Number</div>
-                  <div class="info-value"><a href="tel:${phone}">${phone}</a></div>
-                </div>
-                <div class="info-row">
-                  <div class="info-label">💼 Position</div>
-                  <div class="info-value"><strong>${category}</strong></div>
-                </div>
-                <div class="info-row">
-                  <div class="info-label">🕐 Applied On</div>
-                  <div class="info-value">${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST</div>
-                </div>
-              </div>
-              
-              <!-- Resume Info -->
-              <div class="resume-box">
-                <strong>📎 Resume Attached:</strong><br>
-                <span style="font-size: 15px;">
-                  ${resume.originalname} (${(resume.size / 1024).toFixed(2)} KB)
-                </span>
-              </div>
-              
-              <!-- Footer Note -->
-              <div class="footer-note">
-                <strong style="color: #667eea; font-size: 16px;">💡 How to Reply:</strong><br>
-                <span style="color: #555; margin-top: 10px; display: block;">
-                  Simply click the "Reply" button in your email client.<br>
-                  Your response will go directly to <strong>${email}</strong>
-                </span>
+              <div style="margin-top: 30px; padding: 20px; background: #f9f9f9; border-radius: 8px; text-align: center;">
+                <p style="margin: 0; color: #666;">
+                  <strong>Next Steps:</strong><br>
+                  Review the attached resume and contact the candidate for further evaluation.
+                </p>
               </div>
             </div>
             
-            <!-- Footer -->
-            <div class="footer-text">
-              Sent via Uma Foods Career Portal<br>
-              © ${new Date().getFullYear()} Uma Foods. All rights reserved.
+            <div class="footer">
+              <p>This email was automatically generated from the Uma Foods Career Application Form</p>
+              <p>© ${new Date().getFullYear()} Uma Foods. All rights reserved.</p>
             </div>
           </div>
         </body>
@@ -370,12 +221,10 @@ app.post('/send-email', upload.single('resume'), async (req, res) => {
       ],
     };
 
-    // Send email via Brevo
-    console.log('📧 Sending email via Brevo SMTP...');
+    // Send email
+    console.log('📧 Sending email...');
     const info = await transporter.sendMail(mailOptions);
     console.log('✅ Email sent successfully:', info.messageId);
-    console.log('📬 From:', `${firstName} ${lastName} <${email}>`);
-    console.log('📬 To:', process.env.RECEIVER_EMAIL);
     
     const processingTime = Date.now() - startTime;
     console.log(`⏱️ Processing time: ${processingTime}ms`);
@@ -389,11 +238,6 @@ app.post('/send-email', upload.single('resume'), async (req, res) => {
   } catch (error) {
     const processingTime = Date.now() - startTime;
     console.error('❌ Error sending email:', error);
-    
-    if (error.response) {
-      console.error('Brevo Error:', error.response);
-    }
-    
     console.log(`⏱️ Failed after: ${processingTime}ms`);
     
     if (error.message.includes('Invalid file type')) {
@@ -418,7 +262,7 @@ app.post('/send-email', upload.single('resume'), async (req, res) => {
   }
 });
 
-// Alternative endpoint
+// Alternative endpoint for /api/send-email
 app.post('/api/send-email', upload.single('resume'), async (req, res) => {
   console.log('🔄 Request to /api/send-email, forwarding to main handler...');
   req.url = '/send-email';
@@ -479,7 +323,6 @@ if (process.env.NODE_ENV !== 'production') {
     console.log(`📍 Server URL: http://localhost:${PORT}`);
     console.log(`📍 Health Check: http://localhost:${PORT}/`);
     console.log(`📧 Send Email API: POST http://localhost:${PORT}/send-email`);
-    console.log('📧 Email Service: Brevo SMTP');
     console.log('🚀 ============================================');
     console.log('');
   });
