@@ -4,37 +4,34 @@ import multer from 'multer';
 import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
 
+// Load environment variables
 dotenv.config();
 
 const app = express();
 
-// CORS configuration - PRODUCTION READY
+// CORS configuration - Allow your domain
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
     const allowedOrigins = [
-      'https://tamilorganics.netlify.app/umafoods.netlify.app/index.html',
+      'https://umafoodproducts.com',
       'http://localhost:5500',
       'http://localhost:5501',
-      'http://localhost:5502',
       'http://127.0.0.1:5500',
       'http://127.0.0.1:5501',
-      'http://127.0.0.1:5502',
-      // Add your Netlify URL here when you deploy
     ];
     
-    // Allow all Netlify preview URLs
-    if (origin.includes('.netlify.app')) {
+    // Allow all Netlify and Vercel preview URLs
+    if (origin.includes('.netlify.app') || origin.includes('.vercel.app')) {
       return callback(null, true);
     }
     
     if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
-      console.log('⚠️ Blocked by CORS:', origin);
-      callback(null, true); // Allow for now, change to false in strict production
+      console.log('⚠️ Request from origin:', origin);
+      callback(null, true); // Allow all for now
     }
   },
   methods: ['POST', 'GET', 'OPTIONS'],
@@ -67,15 +64,6 @@ const upload = multer({
   }
 });
 
-// Nodemailer transporter
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
-
 // Root endpoint - Health check
 app.get('/', (req, res) => {
   res.json({ 
@@ -87,15 +75,6 @@ app.get('/', (req, res) => {
       health: 'GET /',
       sendEmail: 'POST /send-email'
     }
-  });
-});
-
-// API health check
-app.get('/api', (req, res) => {
-  res.json({ 
-    status: 'OK', 
-    message: 'Uma Foods Backend API is running',
-    timestamp: new Date().toISOString()
   });
 });
 
@@ -130,6 +109,15 @@ app.post('/send-email', upload.single('resume'), async (req, res) => {
 
     console.log('✅ Validation passed, preparing email...');
 
+    // Create nodemailer transporter
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+
     // Email content
     const mailOptions = {
       from: process.env.EMAIL_USER,
@@ -151,9 +139,9 @@ app.post('/send-email', upload.single('resume'), async (req, res) => {
             .info-table td { padding: 12px 10px; border-bottom: 1px solid #f0f0f0; }
             .info-table td:first-child { font-weight: bold; color: #555; width: 40%; }
             .info-table td:last-child { color: #333; }
+            .badge { display: inline-block; padding: 5px 15px; background: #667eea; color: white; border-radius: 20px; font-size: 14px; }
             .highlight { background-color: #f0f4ff; border-left: 4px solid #667eea; padding: 15px; margin: 20px 0; border-radius: 5px; }
             .footer { text-align: center; margin-top: 20px; color: #999; font-size: 12px; }
-            .badge { display: inline-block; padding: 5px 15px; background: #667eea; color: white; border-radius: 20px; font-size: 14px; }
           </style>
         </head>
         <body>
@@ -195,13 +183,6 @@ app.post('/send-email', upload.single('resume'), async (req, res) => {
               
               <div class="highlight">
                 <strong>📎 Action Required:</strong> The applicant's resume is attached to this email. Please review and respond accordingly.
-              </div>
-              
-              <div style="margin-top: 30px; padding: 20px; background: #f9f9f9; border-radius: 8px; text-align: center;">
-                <p style="margin: 0; color: #666;">
-                  <strong>Next Steps:</strong><br>
-                  Review the attached resume and contact the candidate for further evaluation.
-                </p>
               </div>
             </div>
             
@@ -262,28 +243,6 @@ app.post('/send-email', upload.single('resume'), async (req, res) => {
   }
 });
 
-// Alternative endpoint for /api/send-email
-app.post('/api/send-email', upload.single('resume'), async (req, res) => {
-  console.log('🔄 Request to /api/send-email, forwarding to main handler...');
-  req.url = '/send-email';
-  return app._router.handle(req, res);
-});
-
-// 404 handler
-app.use((req, res) => {
-  console.log('❌ 404 - Route not found:', req.method, req.url);
-  res.status(404).json({
-    success: false,
-    message: `Endpoint not found: ${req.method} ${req.url}`,
-    availableEndpoints: {
-      'GET /': 'Health check',
-      'POST /send-email': 'Submit job application',
-      'POST /api/send-email': 'Submit job application (alternative)'
-    },
-    timestamp: new Date().toISOString()
-  });
-});
-
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('❌ Global error handler:', err);
@@ -309,21 +268,5 @@ app.use((err, req, res, next) => {
   });
 });
 
-// For Vercel serverless function
+// Export for Vercel serverless
 export default app;
-
-// For local development
-const PORT = process.env.PORT || 5000;
-if (process.env.NODE_ENV !== 'production') {
-  app.listen(PORT, () => {
-    console.log('');
-    console.log('🚀 ============================================');
-    console.log('🚀 Uma Foods Backend Server Started');
-    console.log('🚀 ============================================');
-    console.log(`📍 Server URL: http://localhost:${PORT}`);
-    console.log(`📍 Health Check: http://localhost:${PORT}/`);
-    console.log(`📧 Send Email API: POST http://localhost:${PORT}/send-email`);
-    console.log('🚀 ============================================');
-    console.log('');
-  });
-}
