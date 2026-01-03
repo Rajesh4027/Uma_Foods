@@ -16,7 +16,7 @@ app.use(cors({
     if (!origin) return callback(null, true);
     
     const allowedOrigins = [
-      'https://tamilorganics.netlify.app/index.html',
+      'https://tamilorganics.netlify.app',
       'https://umafoodproducts.com',
       'https://www.umafoodproducts.com',
       'http://localhost:5500',
